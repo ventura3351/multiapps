@@ -1,11 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import json
-import time
-import os
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
 import requests
 import logging
 
@@ -22,8 +17,7 @@ CORS(app, resources={
             "https://www.meusdownloads.com", 
             "https://meusdownloads.com/mobile",
             "http://localhost:3000",
-            "http://127.0.0.1:5000",
-            "https://meusdownloads-multiapps-386c5337f064.herokuapp.com"
+            "http://127.0.0.1:5000"
         ],
         "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization", "X-Requested-With"]
@@ -36,119 +30,53 @@ def after_request(response):
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With')
     response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
     response.headers.add('Access-Control-Allow-Credentials', 'true')
-    response.headers.add('Access-Control-Max-Age', '86400')
     return response
 
 class BrowserManager:
     def __init__(self):
-        self.active_drivers = []
+        self.active_sessions = []
     
-    def setup_chrome(self):
-        """Configuração simplificada para Heroku"""
+    def open_authenticated_browser(self, cookies_json, service_name):
+        """Versão simplificada - retorna instruções para o usuário"""
         try:
-            chrome_options = Options()
-            chrome_options.add_argument("--headless")
-            chrome_options.add_argument("--no-sandbox")
-            chrome_options.add_argument("--disable-dev-shm-usage")
-            chrome_options.add_argument("--window-size=1920,1080")
-            chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-            chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-            chrome_options.add_experimental_option('useAutomationExtension', False)
-            
-            driver = webdriver.Chrome(options=chrome_options)
-            driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-            logging.info("✅ Chrome iniciado com sucesso")
-            return driver
-        except Exception as e:
-            logging.error(f"❌ Erro ao iniciar Chrome: {str(e)}")
-            return None
-    
-    def extract_domain_from_cookies(self, cookies_json):
-        try:
+            # Extrair domínio dos cookies
             cookies = json.loads(cookies_json)
-            if not cookies:
-                return "https://www.canva.com"
-            
             domains = {}
             for cookie in cookies:
-                domain = cookie.get('domain', '').strip()
+                domain = cookie.get('domain', '').strip().lstrip('.')
                 if domain:
-                    clean_domain = domain.lstrip('.')
-                    if clean_domain:
-                        domains[clean_domain] = domains.get(clean_domain, 0) + 1
+                    domains[domain] = domains.get(domain, 0) + 1
             
-            if domains:
-                main_domain = max(domains, key=domains.get)
-                return f"https://{main_domain}"
-            else:
-                return "https://www.canva.com"
-                    
-        except Exception as e:
-            logging.error(f"Erro ao extrair domínio: {e}")
-            return "https://www.canva.com"
-    
-    def open_authenticated_browser(self, cookies_json):
-        driver = None
-        try:
-            url = self.extract_domain_from_cookies(cookies_json)
-            logging.info(f"🌐 Iniciando navegador para: {url}")
+            main_domain = max(domains, key=domains.get) if domains else "www.canva.com"
+            url = f"https://{main_domain}"
             
-            driver = self.setup_chrome()
-            if not driver:
-                return {"success": False, "error": "Não foi possível iniciar o navegador"}
+            logging.info(f"🔑 Autenticação solicitada para: {service_name}")
+            logging.info(f"🌐 URL: {url}")
+            logging.info(f"🍪 Cookies carregados: {len(cookies)}")
             
-            driver.get(url)
-            time.sleep(2)
-            
-            try:
-                cookies = json.loads(cookies_json)
-            except Exception as e:
-                if driver:
-                    driver.quit()
-                return {"success": False, "error": f"Erro nos cookies: {str(e)}"}
-            
-            driver.delete_all_cookies()
-            time.sleep(1)
-            
-            cookies_adicionados = 0
-            for cookie in cookies:
-                try:
-                    cookie_dict = {
-                        'name': str(cookie.get('name', '')),
-                        'value': str(cookie.get('value', '')),
-                        'domain': cookie.get('domain', ''),
-                        'path': cookie.get('path', '/'),
-                        'secure': cookie.get('secure', False)
-                    }
-                    
-                    if 'expirationDate' in cookie:
-                        cookie_dict['expiry'] = int(cookie['expirationDate'])
-                    
-                    driver.add_cookie(cookie_dict)
-                    cookies_adicionados += 1
-                    logging.info(f"🍪 Cookie adicionado: {cookie_dict['name']}")
-                    
-                except Exception as e:
-                    logging.warning(f"⚠️ Erro ao adicionar cookie: {e}")
-                    continue
-            
-            driver.refresh()
-            time.sleep(3)
-            
-            self.active_drivers.append(driver)
+            self.active_sessions.append({
+                "service": service_name,
+                "url": url,
+                "timestamp": time.time()
+            })
             
             return {
                 "success": True,
-                "cookies_added": cookies_adicionados,
-                "detected_url": url,
-                "current_url": driver.current_url,
-                "message": "Navegador aberto com sucesso!"
+                "service": service_name,
+                "url": url,
+                "cookies_count": len(cookies),
+                "message": "✅ Pronto para autenticação!",
+                "instructions": [
+                    "1. O site será aberto em uma nova janela",
+                    "2. Use a extensão Cookie-Editor para injetar os cookies",
+                    "3. Recarregue a página para acessar sua conta premium"
+                ],
+                "action": "open_url",
+                "target_url": url
             }
             
         except Exception as e:
-            logging.error(f"❌ Erro crítico: {str(e)}")
-            if driver:
-                driver.quit()
+            logging.error(f"❌ Erro na autenticação: {str(e)}")
             return {"success": False, "error": str(e)}
 
 browser_manager = BrowserManager()
@@ -158,15 +86,12 @@ def index():
     return jsonify({
         "status": "online", 
         "message": "🚀 Servidor MULTIAPPS API - Heroku",
+        "version": "2.0 - Modo Instruções",
         "endpoints": {
             "status": "/api/status",
             "test": "/api/test-connection", 
             "load_cookies": "/api/load-cookies/<service>",
             "open_browser": "/api/open-browser"
-        },
-        "cors": {
-            "allowed_origins": ["https://meusdownloads.com", "https://www.meusdownloads.com"],
-            "status": "configured"
         }
     })
 
@@ -181,11 +106,13 @@ def open_browser():
             return jsonify({"success": False, "error": "Dados JSON são obrigatórios"})
         
         cookies = data.get('cookies')
+        service_name = data.get('service_name', 'Serviço')
+        
         if not cookies:
             return jsonify({"success": False, "error": "Cookies são obrigatórios"})
         
-        logging.info("🔄 Recebida requisição para abrir navegador")
-        result = browser_manager.open_authenticated_browser(cookies)
+        logging.info(f"🔄 Recebida requisição para: {service_name}")
+        result = browser_manager.open_authenticated_browser(cookies, service_name)
         return jsonify(result)
         
     except Exception as e:
@@ -224,15 +151,35 @@ def load_cookies(service):
             return jsonify({"success": False, "error": "Arquivo vazio"})
         
         # Validar JSON
-        json.loads(cookies_text)
+        cookies_data = json.loads(cookies_text)
         
-        logging.info(f"✅ Cookies carregados com sucesso para {service}")
+        # Detectar URL do serviço
+        service_urls_map = {
+            'canvapro': 'https://www.canva.com',
+            'capcutpro': 'https://www.capcut.com',
+            'chatgpt-conta1': 'https://chat.openai.com',
+            'chatgpt-conta2': 'https://chat.openai.com',
+            'leonardoai': 'https://leonardo.ai',
+            'freepik-conta1': 'https://www.freepik.com',
+            'freepik-conta2': 'https://www.freepik.com',
+            'freepik-conta3': 'https://www.freepik.com',
+            'sora': 'https://openai.com/sora',
+            'vectorizer': 'https://vectorizer.ai',
+            'envato': 'https://elements.envato.com'
+        }
+        
+        target_url = service_urls_map.get(service, 'https://www.canva.com')
+        
+        logging.info(f"✅ Cookies carregados: {service} -> {target_url}")
             
         return jsonify({
             "success": True,
             "cookies": cookies_text,
             "service_name": service,
-            "message": f"Cookies carregados: {service}"
+            "target_url": target_url,
+            "cookies_count": len(cookies_data),
+            "message": f"✅ Cookies de {service} carregados!",
+            "instructions": "Use a extensão Cookie-Editor para injetar estes cookies"
         })
             
     except Exception as e:
@@ -243,10 +190,10 @@ def load_cookies(service):
 def status():
     return jsonify({
         "status": "online", 
-        "active_browsers": len(browser_manager.active_drivers),
+        "active_sessions": len(browser_manager.active_sessions),
         "server": "MULTIAPPS API - Heroku",
+        "mode": "instructions_mode",
         "cors_enabled": True,
-        "allowed_origin": "https://meusdownloads.com",
         "timestamp": time.time()
     })
 
@@ -256,8 +203,7 @@ def test_connection():
         "success": True,
         "message": "✅ Conexão estabelecida com sucesso!",
         "server": "Heroku - MULTIAPPS",
-        "cors": "Configurado para meusdownloads.com",
-        "client_ip": request.remote_addr,
+        "mode": "Modo Instruções - Sem Chrome",
         "timestamp": time.time()
     })
 
@@ -265,30 +211,24 @@ def test_connection():
 def cors_test():
     return jsonify({
         "success": True,
-        "message": "✅ CORS test - Deve funcionar do meusdownloads.com",
-        "cors_configured": True,
-        "allowed_origins": ["https://meusdownloads.com", "https://www.meusdownloads.com"]
+        "message": "✅ CORS test - Funcionando!",
+        "cors_configured": True
     })
 
 @app.route('/health')
 def health():
-    return jsonify({
-        "status": "healthy", 
-        "service": "multiapps-api",
-        "timestamp": time.time()
-    })
+    return jsonify({"status": "healthy", "service": "multiapps-api"})
 
 if __name__ == '__main__':
+    import time
     port = int(os.environ.get("PORT", 5000))
     print("🚀 Servidor MULTIAPPS iniciando no Heroku...")
-    print(f"📍 Porta: {port}")
+    print("📍 MODO: Instruções (Sem Chrome)")
     print("🌐 Domínio: meusdownloads.com/mobile")
     print("🔧 CORS Configurado para: https://meusdownloads.com")
     print("📊 Endpoints disponíveis:")
     print("   /api/status")
-    print("   /api/test-connection")
     print("   /api/load-cookies/<service>")
     print("   /api/open-browser")
-    print("   /api/cors-test")
     
     app.run(host='0.0.0.0', port=port, debug=False, threaded=True)
