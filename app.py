@@ -27,23 +27,30 @@ class BrowserManager:
         self.active_drivers = []
     
     def setup_chrome(self):
-    """Configuração simplificada - Heroku já tem Chrome instalado"""
+    """Configura Chrome com múltiplas tentativas"""
     chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--window-size=1920,1080")
     
-    # Configurações mínimas e essenciais
-    chrome_options.add_argument("--headless")  # Executar em background
-    chrome_options.add_argument("--no-sandbox")  # Necessário para Heroku
-    chrome_options.add_argument("--disable-dev-shm-usage")  # Necessário para Heroku
-    chrome_options.add_argument("--window-size=1920,1080")  # Tamanho da janela
-    
-    # O Heroku já tem Chrome instalado, usar diretamente
+    # Tentativa 1: Chrome padrão
     try:
         driver = webdriver.Chrome(options=chrome_options)
-        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        logging.info("✅ Chrome iniciado com sucesso (Método 1)")
         return driver
-    except Exception as e:
-        logging.error(f"Erro ao iniciar Chrome: {str(e)}")
-        return None
+    except Exception as e1:
+        logging.warning(f"⚠️ Método 1 falhou: {e1}")
+        
+        # Tentativa 2: Com Service
+        try:
+            service = Service()
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+            logging.info("✅ Chrome iniciado com sucesso (Método 2)")
+            return driver
+        except Exception as e2:
+            logging.error(f"❌ Todos os métodos falharam: {e2}")
+            return None
     
     def extract_domain_from_cookies(self, cookies_json):
         try:
