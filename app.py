@@ -27,26 +27,32 @@ class BrowserManager:
         self.active_drivers = []
     
     def setup_chrome(self):
-        """Configura Chrome para Heroku"""
-        chrome_options = Options()
-        
-        # Configurações para cloud
-        chrome_options.binary_location = os.environ.get("GOOGLE_CHROME_BIN", "")
-        chrome_options.add_argument("--headless")  # Remove para ver navegador
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--window-size=1920,1080")
-        chrome_options.add_argument("--start-maximized")
-        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_experimental_option('useAutomationExtension', False)
-        
-        # Configurar Chrome Driver
-        chrome_driver_path = os.environ.get("CHROMEDRIVER_PATH", "/usr/local/bin/chromedriver")
+    """Configura Chrome para Heroku com novo buildpack"""
+    chrome_options = Options()
+    
+    # Configurações para novo buildpack
+    chrome_options.binary_location = os.environ.get("GOOGLE_CHROME_BIN", "")
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--remote-debugging-port=9222")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    chrome_options.add_experimental_option('useAutomationExtension', False)
+    
+    # Configurar Chrome Driver do novo buildpack
+    chrome_driver_path = os.environ.get("CHROMEDRIVER_PATH", "")
+    
+    try:
         service = Service(executable_path=chrome_driver_path)
-        
-        return webdriver.Chrome(service=service, options=chrome_options)
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+        driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        return driver
+    except Exception as e:
+        logging.error(f"Erro ao inicializar Chrome: {e}")
+        return None
     
     def extract_domain_from_cookies(self, cookies_json):
         try:
