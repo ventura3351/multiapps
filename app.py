@@ -27,31 +27,22 @@ class BrowserManager:
         self.active_drivers = []
     
     def setup_chrome(self):
-    """Configura Chrome para Heroku com novo buildpack"""
+    """Configuração simplificada - Heroku já tem Chrome instalado"""
     chrome_options = Options()
     
-    # Configurações para novo buildpack
-    chrome_options.binary_location = os.environ.get("GOOGLE_CHROME_BIN", "")
-    chrome_options.add_argument("--headless")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--window-size=1920,1080")
-    chrome_options.add_argument("--remote-debugging-port=9222")
-    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    chrome_options.add_experimental_option('useAutomationExtension', False)
+    # Configurações mínimas e essenciais
+    chrome_options.add_argument("--headless")  # Executar em background
+    chrome_options.add_argument("--no-sandbox")  # Necessário para Heroku
+    chrome_options.add_argument("--disable-dev-shm-usage")  # Necessário para Heroku
+    chrome_options.add_argument("--window-size=1920,1080")  # Tamanho da janela
     
-    # Configurar Chrome Driver do novo buildpack
-    chrome_driver_path = os.environ.get("CHROMEDRIVER_PATH", "")
-    
+    # O Heroku já tem Chrome instalado, usar diretamente
     try:
-        service = Service(executable_path=chrome_driver_path)
-        driver = webdriver.Chrome(service=service, options=chrome_options)
+        driver = webdriver.Chrome(options=chrome_options)
         driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
         return driver
     except Exception as e:
-        logging.error(f"Erro ao inicializar Chrome: {e}")
+        logging.error(f"Erro ao iniciar Chrome: {str(e)}")
         return None
     
     def extract_domain_from_cookies(self, cookies_json):
